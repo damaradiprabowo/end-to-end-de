@@ -7,6 +7,8 @@ serve via APIs → visualize.
 
 The whole stack runs locally with Docker Compose — no cloud credentials needed.
 
+**[Walkthrough video](https://youtu.be/slZBH82xLVw)** — end-to-end demo of the pipeline, dashboard, and Airflow orchestration.
+
 ### Highlights
 
 - **Multi-tenant ingestion** — 3 source tenants loaded concurrently (Go goroutines + channels, fan-out/fan-in).
