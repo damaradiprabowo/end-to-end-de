@@ -1,0 +1,223 @@
+name: end-to-end-de-platform
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+  image: minimarket/airflow:latest
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    # ---- pipeline connection settings (used by EL + dbt tasks) ----
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: ${POSTGRES_DB:-pos}
+    POSTGRES_USER: ${POSTGRES_USER:-pos_user}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pos_password}
+    CLICKHOUSE_HOST: clickhouse
+    CLICKHOUSE_PORT: "9000"
+    CLICKHOUSE_HTTP_PORT: "8123"
+    CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+    CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+    CLICKHOUSE_RAW_DB: ${CLICKHOUSE_RAW_DB:-raw}
+    CLICKHOUSE_ANALYTICS_DB: ${CLICKHOUSE_ANALYTICS_DB:-analytics}
+    BEGINNER_TENANT: tenant_01
+    TENANT_SCHEMAS: ${TENANT_SCHEMAS:-tenant_01,tenant_02,tenant_03}
+    # Compose network the advanced DAG's DockerOperator task containers join.
+    PIPELINE_DOCKER_NETWORK: end-to-end-de-platform_default
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - airflow_state:/opt/airflow/state
+    # The advanced DAG launches sibling containers via the host Docker daemon.
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+
+services:
+  # ----------------------- OLTP source -----------------------
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pos}
+      POSTGRES_USER: ${POSTGRES_USER:-pos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pos_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./script/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pos_user} -d ${POSTGRES_DB:-pos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------- Data Warehouse -----------------------
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    environment:
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./script/clickhouse-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------- Seed (one-shot) -----------------------
+  # Usage: docker compose run --rm seed
+  seed:
+    build:
+      context: ./script/seed
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-pos}
+      POSTGRES_USER: ${POSTGRES_USER:-pos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pos_password}
+      TENANT_SCHEMAS: ${TENANT_SCHEMAS:-tenant_01,tenant_02,tenant_03}
+      SEED_CUSTOMERS: ${SEED_CUSTOMERS:-200}
+      SEED_PRODUCTS: ${SEED_PRODUCTS:-120}
+      SEED_TRANSACTIONS: ${SEED_TRANSACTIONS:-3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["seed"]
+
+  # ----------------------- Airflow metadata DB -----------------------
+  airflow-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname admin --lastname admin \
+          --role Admin --email admin@example.com || true
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8081:8080"
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+  # ----------------------- Intermediate API (FastAPI) -----------------------
+  api:
+    build:
+      context: ./api
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_ANALYTICS_DB: ${CLICKHOUSE_ANALYTICS_DB:-analytics}
+    ports:
+      - "8000:8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # ----------------------- Unified dashboard (static) -----------------------
+  dashboard:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+      - go-api
+
+  # ===================== Advanced services =====================
+  elt:
+    build:
+      context: ./pipeline/golang
+    image: minimarket/elt:latest
+    profiles: ["build"]
+
+  dbt:
+    build:
+      context: .
+      dockerfile: dbt/Dockerfile
+    image: minimarket/dbt:latest
+    profiles: ["build"]
+
+  # ----------------------- Advanced Data API (Golang) -----------------------
+  go-api:
+    build:
+      context: ./go-api
+    image: minimarket/go-api:latest
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: "8123"
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_ANALYTICS_DB: ${CLICKHOUSE_ANALYTICS_DB:-analytics}
+      API_PORT: "8090"
+      CACHE_TTL_SECONDS: "60"
+    ports:
+      - "8090:8090"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  ch_data:
+  airflow_db_data:
+  airflow_state:

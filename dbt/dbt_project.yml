@@ -1,0 +1,32 @@
+name: 'minimarket'
+version: '1.0.0'
+config-version: 2
+
+profile: 'minimarket'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  minimarket:
+    # All models live in the single `analytics` ClickHouse database and are
+    # distinguished by naming convention (stg_ / dim_ / fact_). This keeps the
+    # ClickHouse adapter configuration simple (CH databases != SQL schemas).
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table
+
+vars:
+  # Tenant used by the Beginner single-tenant analytics (notebook).
+  beginner_tenant: 'tenant_01'

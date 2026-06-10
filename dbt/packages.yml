@@ -1,0 +1,4 @@
+# No external packages are required: surrogate keys, date keys and audit
+# columns are implemented with custom macros in macros/helpers.sql.
+# (Kept as an explicit empty list so `dbt run` never demands `dbt deps`.)
+packages: []

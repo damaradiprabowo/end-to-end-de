@@ -1,0 +1,19 @@
+{
+  "tenants": [
+    {
+      "tenant_id": "tenant_01",
+      "schema": "tenant_01",
+      "display_name": "Jakarta Branch"
+    },
+    {
+      "tenant_id": "tenant_02",
+      "schema": "tenant_02",
+      "display_name": "Bandung Branch"
+    },
+    {
+      "tenant_id": "tenant_03",
+      "schema": "tenant_03",
+      "display_name": "Surabaya Branch"
+    }
+  ]
+}

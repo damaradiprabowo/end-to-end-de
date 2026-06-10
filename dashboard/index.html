@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minimarket Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- matrix controller powers the cohort-retention heatmap (Advanced Q7).
+       NB: the UMD bundle is `chartjs-chart-matrix.min.js` (there is no
+       `*.umd.min.js` for v2.x). It auto-registers the `matrix` controller. -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+           background:var(--bg); color:var(--txt); }
+    header { padding:24px 32px; border-bottom:1px solid #334155; }
+    header h1 { margin:0; font-size:22px; }
+    header p { margin:4px 0 0; color:var(--muted); font-size:14px; }
+    .section-title { padding:20px 32px 0; }
+    .section-title h2 { margin:0; font-size:17px; }
+    .section-title p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(440px,1fr));
+            gap:20px; padding:16px 32px 8px; }
+    .card { background:var(--card); border:1px solid #334155; border-radius:12px;
+            padding:18px; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+    .card.wide { grid-column: 1 / -1; }
+    .card h3 { margin:0 0 4px; font-size:15px; }
+    .card .q { color:var(--muted); font-size:12px; margin-bottom:12px; }
+    .status { padding:4px 32px 16px; color:var(--muted); font-size:13px; }
+    canvas { max-height:320px; }
+    .card.wide canvas { max-height:420px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Minimarket Analytics</h1>
+    <p>Unified dashboard — ClickHouse star schema · Intermediate (FastAPI) + Advanced (Golang Data API)</p>
+  </header>
+  <div class="status" id="status">Loading data from APIs…</div>
+
+  <!-- ===================== Intermediate (FastAPI :8000) ===================== -->
+  <div class="section-title">
+    <h2>Intermediate · FastAPI</h2>
+    <p>5 analytic questions (brief §7.2)</p>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Q1 · Revenue by Store / Month</h3>
+      <div class="q">Revenue trend per store (last 6 months)</div>
+      <canvas id="ic1"></canvas></div>
+    <div class="card"><h3>Q2 · Promotion Effectiveness</h3>
+      <div class="q">Total discount given per promotion</div>
+      <canvas id="ic2"></canvas></div>
+    <div class="card"><h3>Q3 · Top Products by City</h3>
+      <div class="q">Top 3 products by revenue in each city</div>
+      <canvas id="ic3"></canvas></div>
+    <div class="card"><h3>Q4 · Customer Segments</h3>
+      <div class="q">High / Medium / Low spenders per city</div>
+      <canvas id="ic4"></canvas></div>
+    <div class="card"><h3>Q5 · Transactions by Day of Week</h3>
+      <div class="q">Transaction count &amp; revenue per weekday</div>
+      <canvas id="ic5"></canvas></div>
+  </div>
+
+  <!-- ===================== Advanced (Golang Data API :8090) ===================== -->
+  <div class="section-title">
+    <h2>Advanced · Golang Data API</h2>
+    <p>7 analytic questions (brief §8.3, served under <code>/api/v1/*</code>)</p>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Q1 · Revenue &amp; Margin by Category / Quarter</h3>
+      <div class="q">Revenue (stacked by category) and margin per quarter</div>
+      <canvas id="ac1"></canvas></div>
+    <div class="card"><h3>Q2 · Customer Lifetime Value</h3>
+      <div class="q">Top 20 customers by total spend, with loyalty tier</div>
+      <canvas id="ac2"></canvas></div>
+    <div class="card"><h3>Q3 · Inventory Turnover</h3>
+      <div class="q">Slowest-moving stock per store×product (qty_sold / stock)</div>
+      <canvas id="ac3"></canvas></div>
+    <div class="card"><h3>Q4 · Employee Effectiveness</h3>
+      <div class="q">Avg transaction value per cashier per store (top 15)</div>
+      <canvas id="ac4"></canvas></div>
+    <div class="card"><h3>Q5 · Promotion ROI</h3>
+      <div class="q">(Incremental revenue vs baseline) / total discount, per promo</div>
+      <canvas id="ac5"></canvas></div>
+    <div class="card"><h3>Q6 · Supplier Dependency</h3>
+      <div class="q">Top sellers: single-source (red) vs multi-source (green)</div>
+      <canvas id="ac6"></canvas></div>
+    <div class="card wide"><h3>Q7 · Customer Retention Cohort</h3>
+      <div class="q">% of each monthly cohort still active N months later (heatmap)</div>
+      <canvas id="ac7"></canvas></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

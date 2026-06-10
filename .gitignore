@@ -1,0 +1,26 @@
+# env
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# go
+pipeline/golang/elt
+pipeline/golang/state/
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# airflow
+airflow/logs/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

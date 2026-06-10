@@ -1,0 +1,167 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Cleaned customers, one row per tenant+customer."
+    columns:
+      - name: customer_sk
+        description: "Tenant-scoped surrogate key."
+        tests: [not_null, unique]
+      - name: customer_id
+        description: "Natural id from source."
+        tests: [not_null]
+      - name: gender
+        tests:
+          - accepted_values:
+              values: ['Male', 'Female']
+              config: {severity: warn}
+
+  - name: stg_products
+    description: "Cleaned products with category/brand."
+    columns:
+      - name: product_sk
+        tests: [not_null, unique]
+      - name: unit_price
+        description: "List price; must be non-negative."
+        tests:
+          - not_null
+      - name: product_id
+        tests: [not_null]
+
+  - name: stg_stores
+    description: "Cleaned stores dimension source."
+    columns:
+      - name: store_sk
+        tests: [not_null, unique]
+      - name: store_type
+        tests:
+          - accepted_values:
+              values: ['minimarket', 'supermarket', 'express']
+              config: {severity: warn}
+
+  - name: stg_suppliers
+    description: "Cleaned suppliers."
+    columns:
+      - name: supplier_sk
+        tests: [not_null, unique]
+
+  - name: stg_promotions
+    description: "Cleaned promotions."
+    columns:
+      - name: promo_sk
+        tests: [not_null, unique]
+      - name: promo_type
+        tests:
+          - accepted_values:
+              values: ['discount', 'bundle', 'cashback']
+              config: {severity: warn}
+
+  - name: stg_transactions
+    description: "Completed transactions only (status = 'completed')."
+    columns:
+      - name: transaction_sk
+        tests: [not_null, unique]
+      - name: customer_sk
+        description: "FK to stg_customers."
+        tests:
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_sk
+      - name: store_sk
+        tests:
+          - relationships:
+              to: ref('stg_stores')
+              field: store_sk
+              config: {severity: warn}
+      - name: payment_method
+        tests:
+          - accepted_values:
+              values: ['cash', 'debit', 'credit', 'e-wallet']
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['completed']
+
+  - name: stg_transaction_items
+    description: "Line items belonging to completed transactions."
+    columns:
+      - name: item_sk
+        tests: [not_null, unique]
+      - name: product_sk
+        tests:
+          - relationships:
+              to: ref('stg_products')
+              field: product_sk
+      - name: quantity
+        tests: [not_null]
+
+  - name: stg_transaction_promotions
+    description: "Junction: promotions applied to transactions."
+    columns:
+      - name: txn_promo_sk
+        tests: [not_null, unique]
+      - name: promo_sk
+        tests:
+          - relationships:
+              to: ref('stg_promotions')
+              field: promo_sk
+
+  # ---------------- Advanced staging ----------------
+  - name: stg_employees
+    description: "Cleaned employees per store."
+    columns:
+      - name: employee_sk
+        tests: [not_null, unique]
+      - name: store_sk
+        tests:
+          - relationships:
+              to: ref('stg_stores')
+              field: store_sk
+              config: {severity: warn}
+      - name: role
+        tests:
+          - accepted_values:
+              values: ['cashier', 'supervisor', 'manager']
+              config: {severity: warn}
+
+  - name: stg_inventory
+    description: "Inventory snapshot per store x product."
+    columns:
+      - name: inventory_sk
+        tests: [not_null, unique]
+      - name: product_sk
+        tests:
+          - relationships:
+              to: ref('stg_products')
+              field: product_sk
+              config: {severity: warn}
+      - name: stock_qty
+        tests: [not_null]
+
+  - name: stg_product_supplier
+    description: "Many-to-many product/supplier with cost price."
+    columns:
+      - name: product_supplier_sk
+        tests: [not_null, unique]
+      - name: supplier_sk
+        tests:
+          - relationships:
+              to: ref('stg_suppliers')
+              field: supplier_sk
+              config: {severity: warn}
+
+  - name: stg_customer_loyalty
+    description: "Customer loyalty tier and points."
+    columns:
+      - name: loyalty_sk
+        tests: [not_null, unique]
+      - name: customer_sk
+        tests:
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_sk
+              config: {severity: warn}
+      - name: tier
+        tests:
+          - accepted_values:
+              values: ['bronze', 'silver', 'gold', 'platinum']

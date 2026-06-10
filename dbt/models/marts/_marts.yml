@@ -1,0 +1,154 @@
+version: 2
+
+models:
+  - name: dim_customer
+    description: "Customer dimension (tenant-scoped)."
+    columns:
+      - name: customer_sk
+        tests: [not_null, unique]
+
+  - name: dim_product
+    description: "Product dimension with category and brand."
+    columns:
+      - name: product_sk
+        tests: [not_null, unique]
+      - name: category
+        tests:
+          - not_null:
+              config: {severity: warn}
+
+  - name: dim_store
+    description: "Store dimension."
+    columns:
+      - name: store_sk
+        tests: [not_null, unique]
+
+  - name: dim_promotion
+    description: "Promotion dimension."
+    columns:
+      - name: promo_sk
+        tests: [not_null, unique]
+
+  - name: dim_date
+    description: "Date dimension generated from the transaction date range."
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+      - name: day_of_week
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7]
+
+  - name: fact_sales
+    description: "Sales fact at transaction line-item grain (completed only)."
+    columns:
+      - name: sales_sk
+        tests: [not_null, unique]
+      - name: customer_sk
+        tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+      - name: product_sk
+        tests:
+          - relationships:
+              to: ref('dim_product')
+              field: product_sk
+      - name: store_sk
+        tests:
+          - relationships:
+              to: ref('dim_store')
+              field: store_sk
+              config: {severity: warn}
+      - name: date_key
+        tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: net_amount
+        tests: [not_null]
+
+  - name: fact_promotion_usage
+    description: "One row per promotion applied to a completed transaction."
+    columns:
+      - name: txn_promo_sk
+        tests: [not_null, unique]
+      - name: promo_sk
+        tests:
+          - relationships:
+              to: ref('dim_promotion')
+              field: promo_sk
+      - name: transaction_sk
+        tests:
+          - relationships:
+              to: ref('fact_sales')
+              field: transaction_sk
+              config: {severity: warn}
+
+  # ---------------- Advanced intermediate + marts ----------------
+  - name: int_sales_enriched
+    description: "Intermediate line-item layer enriched with product/store/employee/cost."
+    columns:
+      - name: sales_sk
+        tests: [not_null, unique]
+      - name: net_amount
+        tests: [not_null]
+
+  - name: dim_employee
+    description: "Employee dimension."
+    columns:
+      - name: employee_sk
+        tests: [not_null, unique]
+      - name: role
+        tests:
+          - accepted_values:
+              values: ['cashier', 'supervisor', 'manager']
+              config: {severity: warn}
+
+  - name: dim_supplier
+    description: "Supplier dimension."
+    columns:
+      - name: supplier_sk
+        tests: [not_null, unique]
+
+  - name: dim_loyalty_tier
+    description: "Static loyalty tier dimension with ranking."
+    columns:
+      - name: tier_sk
+        tests: [not_null, unique]
+      - name: tier
+        tests:
+          - accepted_values:
+              values: ['bronze', 'silver', 'gold', 'platinum']
+
+  - name: fact_inventory_movement
+    description: "Inventory position and units sold per store x product."
+    columns:
+      - name: inventory_sk
+        tests: [not_null, unique]
+      - name: product_sk
+        tests:
+          - relationships:
+              to: ref('dim_product')
+              field: product_sk
+              config: {severity: warn}
+      - name: stock_qty
+        tests: [not_null]
+
+  - name: fact_loyalty_activity
+    description: "Customer loyalty snapshot (points, tier, recorded spend)."
+    columns:
+      - name: loyalty_sk
+        tests: [not_null, unique]
+      - name: tier_sk
+        tests:
+          - relationships:
+              to: ref('dim_loyalty_tier')
+              field: tier_sk
+              config: {severity: warn}
+      - name: customer_sk
+        tests:
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_sk
+              config: {severity: warn}
